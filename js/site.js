@@ -159,7 +159,7 @@
           '<div class="booker__times" data-times data-empty></div>' +
         '</div>' +
         '<div class="booker__confirm">' +
-          '<button type="button" class="btn" data-confirm disabled>Confirm booking' + ARROW + '</button>' +
+          '<button type="button" class="btn" data-confirm data-track="booking" disabled>Confirm booking' + ARROW + '</button>' +
           '<span class="booker__hint">You&rsquo;ll get an email to finalise. We never share your details.</span>' +
         '</div>' +
       '</div>' +
