@@ -894,18 +894,61 @@ a.review-bubble__who:hover{opacity:.75}
   .review-bubble{bottom:calc(64px + .8rem);right:.8rem;left:.8rem;width:auto}
 }
 
-/* ---------- Calendly scheduler wrapper ---------- */
+/* ---------- Calendly scheduler (loaded on intent) ---------- */
 .scheduler{
   max-width:760px;margin-inline:auto;
   background:var(--paper);border:1px solid var(--line);border-radius:var(--r-lg);
   box-shadow:var(--shadow-md);overflow:hidden;padding:.5rem;
 }
-.scheduler .calendly-inline-widget{border-radius:calc(var(--r-lg) - 4px);overflow:hidden}
+.scheduler{position:relative}
+.scheduler__embed{border-radius:calc(var(--r-lg) - 4px);overflow:hidden;display:none}
+.scheduler.is-open .scheduler__embed{display:block}
+
+.scheduler__facade{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:.55rem;
+  padding:clamp(2.4rem,7vw,4rem) 1.5rem;
+}
+/* once opened, the panel becomes a loading veil over the embed until Calendly reports ready */
+.scheduler.is-open .scheduler__facade{
+  position:absolute;inset:.5rem;z-index:2;background:var(--paper);
+  border-radius:calc(var(--r-lg) - 4px);
+}
+.scheduler.cal-ready .scheduler__facade{display:none}
+.scheduler.is-open .scheduler__facade .btn{
+  pointer-events:none;background:transparent;color:var(--muted);border-color:var(--line-strong);
+}
+.scheduler__facade-ic{
+  width:54px;height:54px;border-radius:15px;display:grid;place-items:center;
+  background:var(--gold-wash);color:var(--gold-deep);margin-bottom:.3rem;
+}
+.scheduler__facade-ic svg{width:26px;height:26px}
+.scheduler__facade-h{font-family:var(--ff-display);font-weight:400;font-size:clamp(1.15rem,1rem + .8vw,1.4rem);color:var(--ink);letter-spacing:-.01em}
+.scheduler__facade-s{font-size:.86rem;color:var(--muted)}
+.scheduler__facade .btn{margin-top:.7rem}
+.scheduler__facade .btn .spin{margin-right:.1rem}
+
+.spin{
+  width:1em;height:1em;flex:none;border:2px solid currentColor;border-right-color:transparent;
+  border-radius:50%;display:inline-block;vertical-align:-.15em;animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+
 .scheduler__fallback{
   text-align:center;font-size:.82rem;color:var(--muted);padding:.7rem 1rem .4rem;
 }
 .scheduler__fallback a{color:var(--gold-deep);border-bottom:1px solid var(--gold-line);white-space:nowrap}
 .scheduler__fallback a:hover{color:var(--ink)}
+
+/* booking = step one, quiz = the softer alternative below it */
+.step-tag{
+  display:inline-flex;align-items:center;gap:.5rem;
+  font-family:var(--ff-ui);font-size:.68rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--gold-deep);
+}
+.step-tag b{
+  width:1.5rem;height:1.5rem;border-radius:50%;display:grid;place-items:center;
+  background:var(--gold);color:var(--ink-900);font-size:.72rem;
+}
 
 /* ---------- single hero review (Google) ---------- */
 .review-hero{

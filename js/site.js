@@ -117,38 +117,85 @@
   var ARROW = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
   /* =========================================================
-     SCHEDULER — Calendly inline embed (Debbie's real calendar)
+     SCHEDULER — Calendly, loaded on intent (fast first paint)
+     Nothing Calendly-related touches the page until the section
+     nears the viewport or the visitor asks to book.
      ========================================================= */
-  var CAL_BASE = CALENDLY + '?hide_gdpr_banner=1&primary_color=ce9b50';
-  var calWidget = $('.calendly-inline-widget');
+  var scheduler = $('.scheduler[data-cal]');
+  var calWidget = scheduler ? scheduler.querySelector('.scheduler__embed') : null;
+  var calUrl = calWidget ? calWidget.getAttribute('data-cal-url') : null;
+  var calScriptState = 0;            // 0 none, 1 loading, 2 ready
+  var calWaiters = [];
+  var calOpened = false;
 
-  function calReady(cb) {
-    if (window.Calendly && window.Calendly.initInlineWidget) return cb();
-    var tries = 0, t = setInterval(function () {
-      if (window.Calendly && window.Calendly.initInlineWidget) { clearInterval(t); cb(); }
-      else if (++tries > 70) clearInterval(t);
-    }, 120);
+  function calScript(cb) {
+    if (cb) calWaiters.push(cb);
+    if (calScriptState === 2) return flushCal();
+    if (calScriptState === 1) return;
+    calScriptState = 1;
+    var css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'https://assets.calendly.com/assets/external/widget.css';
+    document.head.appendChild(css);
+    var s = document.createElement('script');
+    s.src = 'https://assets.calendly.com/assets/external/widget.js';
+    s.async = true;
+    s.onload = function () { calScriptState = 2; flushCal(); };
+    s.onerror = function () { calScriptState = 0; };
+    document.head.appendChild(s);
+  }
+  function flushCal() {
+    if (!(window.Calendly && window.Calendly.initInlineWidget)) return;
+    var q = calWaiters; calWaiters = [];
+    q.forEach(function (fn) { try { fn(); } catch (e) { /* ignore */ } });
   }
 
-  function loadCalendly(prefill) {
-    if (!calWidget) return;
-    calReady(function () {
+  function renderCal(prefill) {
+    if (!calWidget || !calUrl) return;
+    calScript(function () {
       try {
         calWidget.innerHTML = '';
-        window.Calendly.initInlineWidget({ url: CAL_BASE, parentElement: calWidget, prefill: prefill || {} });
-      } catch (e) { /* leave the markup embed in place */ }
+        window.Calendly.initInlineWidget({ url: calUrl, parentElement: calWidget, prefill: prefill || {} });
+        calOpened = true;
+      } catch (e) { /* ignore */ }
     });
   }
 
+  function openCal(prefill) {
+    if (!scheduler || !calWidget) return false;
+    if (!scheduler.classList.contains('is-open')) {
+      scheduler.classList.add('is-open');
+      var fh = scheduler.querySelector('.scheduler__facade-h');
+      var fs = scheduler.querySelector('.scheduler__facade-s');
+      var btn = scheduler.querySelector('[data-cal-open] .btn');
+      if (fh) fh.textContent = 'Loading Debbie’s calendar';
+      if (fs) fs.textContent = 'One moment while the live availability loads.';
+      if (btn) btn.innerHTML = '<span class="spin" aria-hidden="true"></span>Loading…';
+      setTimeout(function () { scheduler.classList.add('cal-ready'); }, 6000);
+    }
+    renderCal(prefill);
+    return true;
+  }
+
+  // hide the loading veil once Calendly's iframe reports it has rendered
+  window.addEventListener('message', function (e) {
+    if (!scheduler) return;
+    if (e.origin && e.origin.indexOf('calendly.com') === -1) return;
+    var d = e.data;
+    if (d && typeof d === 'object' && typeof d.event === 'string' && d.event.indexOf('calendly.') === 0) {
+      scheduler.classList.add('cal-ready');
+    }
+  });
+
   function openScheduler(prefill) {
     prefill = prefill || {};
+    var pf = {};
+    if (prefill.name) pf.name = prefill.name;
+    if (prefill.email) pf.email = prefill.email;
+    if (prefill.note) pf.customAnswers = { a1: prefill.note };
     var target = document.getElementById('book');
-    if (calWidget && target) {
-      var pf = {};
-      if (prefill.name) pf.name = prefill.name;
-      if (prefill.email) pf.email = prefill.email;
-      if (prefill.note) pf.customAnswers = { a1: prefill.note };
-      if (pf.name || pf.email || pf.customAnswers) loadCalendly(pf);
+    if (scheduler && calWidget && target) {
+      openCal(pf);
       target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
     } else {
       try { if (prefill.note) sessionStorage.setItem('apb_note', prefill.note); } catch (e) { /* ignore */ }
@@ -156,26 +203,40 @@
     }
   }
 
-  if (calWidget) {
-    // pick up a quiz/message summary carried from another page
+  if (scheduler && calWidget) {
+    var facade = scheduler.querySelector('[data-cal-open]');
+    if (facade) {
+      facade.addEventListener('click', function () { openCal({}); });
+      ['mouseenter', 'focusin', 'touchstart'].forEach(function (ev) {
+        facade.addEventListener(ev, function warm() { calScript(); facade.removeEventListener(ev, warm); }, { passive: true });
+      });
+    }
+    // warm the Calendly script once the section is ~half a screen away
+    if ('IntersectionObserver' in window) {
+      var calIO = new IntersectionObserver(function (en) {
+        if (en[0].isIntersecting) { calScript(); calIO.disconnect(); }
+      }, { rootMargin: '400px 0px' });
+      calIO.observe(scheduler);
+    }
+    // arriving mid-flow: a carried quiz/message summary, or a direct #book link
     var carriedNote = '';
     try { carriedNote = sessionStorage.getItem('apb_note') || ''; if (carriedNote) sessionStorage.removeItem('apb_note'); } catch (e) { /* ignore */ }
-    if (carriedNote) loadCalendly({ customAnswers: { a1: carriedNote } });
-    if (location.hash === '#book') setTimeout(function () {
-      var t = document.getElementById('book'); if (t) t.scrollIntoView();
-    }, 250);
+    if (carriedNote) openCal({ customAnswers: { a1: carriedNote } });
+    if (location.hash === '#book') {
+      openCal({});
+      setTimeout(function () { var t = document.getElementById('book'); if (t) t.scrollIntoView(); }, 250);
+    }
   }
 
   $$('[data-book]').forEach(function (a) {
     a.addEventListener('click', function (e) {
-      if (calWidget) { e.preventDefault(); openScheduler({}); return; }
+      if (scheduler && calWidget) { e.preventDefault(); openScheduler({}); return; }
       var href = a.getAttribute('href') || '';
       if (href === '#book' || href.indexOf('#book') === 0) { e.preventDefault(); window.location.href = 'contact.html#book'; }
       // otherwise the href already points at contact.html#book — let it navigate
     });
   });
 
-  /* legacy no-op stubs (kept so older inline calls don't throw) */
   /* =========================================================
      QUIZ — "Are your books losing you money?"  (no pricing)
      ========================================================= */
