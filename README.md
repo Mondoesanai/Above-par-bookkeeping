@@ -31,29 +31,47 @@ Puppeteer install in the parent folder and is not needed to run the site.
 Shared: `css/site.css`, `js/site.js`. Assets in `images/` (logo SVGs) and
 `images/photos/` (Unsplash stock — swap for Debbie's real photos when available).
 
-## Things the client still needs to wire up
+## Integrations (live)
 
-- **Booking** uses a *custom, simulated* calendar UI (`initBooker` in `js/site.js`).
-  Picking a service / day / time and confirming shows a "requested — Debbie will
-  confirm by email" screen; **nothing is actually scheduled yet.** When Debbie's
-  real Calendly is ready, replace the `[data-booker]` block with a Calendly inline
-  embed pointed at `CALENDLY` (constant already in `js/site.js`).
-- **Contact form** is front-end only — it shows a confirmation, composes a
-  pre-filled `mailto:`, and routes the visitor into the booking calendar.
-  Connect `<form id="contactForm">` to Formspree / Basin / Netlify Forms /
-  GoHighLevel for real submissions.
-- **Quiz** ("Are your books losing you money?") is a standalone lead-magnet
-  component (`initQuiz` in `js/site.js`, fully JS-rendered into `<div class="quiz"
-  data-quiz>`): intro screen → 6 big A/B/C questions with a progress bar → a
-  "books-health" score ring + verdict + CTA. No pricing (Debbie's rates aren't
-  set here). It's pushed near the top of the home page and echoed as a
-  `.quiz-cta` band on About / Services / Contact. Completing it carries the
-  result into the booking calendar.
-- **Testimonials + the floating review bubble** use clearly-labelled *sample*
-  copy. Swap for real client quotes (and a real Google review link) when ready.
-- **Domain / analytics / OG image**: canonical + Open Graph URLs assume
-  `https://aboveparbookkeeping.com/`. Add an analytics snippet and a real
-  `og:image` (1200×630) if desired.
+- **Booking = real Calendly.** `index.html` and `contact.html` embed
+  `calendly.com/debbie-aboveparbookkeeping/30min` via the official inline widget
+  (`assets.calendly.com/assets/external/widget.js`). Every `[data-book]` button
+  and the quiz/contact-form handoff call `openScheduler()` in `js/site.js`, which
+  re-inits the embed with a prefilled `a1` custom answer (the quiz result or the
+  message text) and scrolls to `#book`. Cross-page handoffs carry the note in
+  `sessionStorage` (`apb_note`). A plain-link fallback sits under each embed.
+  Debbie just needs to set her Calendly availability + intake questions.
+- **Google Business Profile** (`https://share.google/vOsIL2xC95UJYuE14`) is wired
+  into the footer social row, the homepage review block ("Read it on Google" /
+  "Leave a review"), the floating review bubble, and every page's `sameAs`.
+- **Contact form** is still front-end only — shows a confirmation, composes a
+  pre-filled `mailto:`, and routes into the Calendly embed. Connect
+  `<form id="contactForm">` to Formspree / Basin / GoHighLevel for real delivery.
+- **Reviews**: one real 5★ Google review (Sarah Reyna) — homepage `.review-hero`
+  card + `.review-bubble` + `Review`/`AggregateRating` schema. Add more as they
+  come in (`REVIEW_SHORT` in `js/site.js`, `.review-hero` in `index.html`).
+- **Quiz** ("Are your books losing you money?") — `initQuiz` in `js/site.js`,
+  intro → 6 A/B/C questions → books-health score ring. Result carries into the
+  Calendly booking via `openScheduler({ note })`.
+
+## SEO / AI-SEO
+
+- Per-page keyword-targeted `<title>` + meta description, `keywords`, `author`,
+  `robots` (`max-image-preview:large`), canonical, `hreflang`, geo meta
+  (`geo.region` US-TX, `geo.position`), full Open Graph + `summary_large_image`
+  Twitter cards with a real 1200×630 `images/og-cover.png`.
+- **Structured data** (JSON-LD): `@graph` on the homepage with `Organization` +
+  `WebSite` + `AccountingService` (NAP, geo, `areaServed` cities, hours,
+  `hasOfferCatalog`, `aggregateRating`, `review`, `knowsAbout`); `FAQPage` on
+  home + about; `Service` graph on services; `ContactPage` + `BreadcrumbList`.
+- **AI crawlers**: `robots.txt` explicitly allows GPTBot, OAI-SearchBot,
+  ClaudeBot, PerplexityBot, Google-Extended, Applebot-Extended, CCBot, etc.
+- **`llms.txt`** at the site root — plain-text business summary, facts, page map,
+  and common Q&A for LLM answer engines.
+- Homepage **FAQ section** (7 conversational Q&As) for People-Also-Ask / AI
+  answers. `sitemap.xml` has `lastmod`.
+- **Domain / analytics**: canonical URLs assume `https://aboveparbookkeeping.com/`.
+  Dashboard `t.js` snippet is already on every page.
 
 ## Brand
 
@@ -64,8 +82,3 @@ Shared: `css/site.css`, `js/site.js`. Assets in `images/` (logo SVGs) and
   for dark backgrounds, `images/favicon.svg`. Rebuilt from the client's existing
   logo with a transparent background.
 
-## SEO
-
-Per-page `<title>` + meta description, canonical, Open Graph, JSON-LD
-(`AccountingService`, `OfferCatalog`, `BreadcrumbList`, `ContactPage`),
-`robots.txt`, `sitemap.xml`, semantic landmarks, reduced-motion support.

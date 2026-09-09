@@ -5,8 +5,7 @@
   'use strict';
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // When Debbie's real scheduler is ready, swap the custom booker (initBooker)
-  // for a Calendly inline embed pointed at this URL.
+  // Debbie's live Calendly — used by the inline embed on index.html / contact.html.
   var CALENDLY = 'https://calendly.com/debbie-aboveparbookkeeping/30min';
 
   var $ = function (s, r) { return (r || document).querySelector(s); };
@@ -115,213 +114,68 @@
     stage.addEventListener('mouseenter', function () { stageInner.style.transition = 'transform .12s linear'; });
   }
 
-  /* =========================================================
-     BOOKER — custom calendar / scheduler UI (simulated)
-     ========================================================= */
   var ARROW = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  var CHECK = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10.5l4 4 8-9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  var SERVICES = ['Free consultation', 'Monthly bookkeeping', 'Payroll', 'Catch-up / cleanup', 'Budget & forecasting', 'Not sure yet'];
-  var SLOTS = ['9:00 AM', '9:30 AM', '10:00 AM', '11:00 AM', '1:00 PM', '1:30 PM', '2:30 PM', '3:30 PM'];
-  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  var bookerState = { service: 'Free consultation', date: null, time: null, name: '', email: '', note: '' };
-  var bookerEl = null;
 
-  function initBooker(root) {
-    bookerEl = root;
-    var view = new Date(); view.setDate(1);
-    var today = new Date(); today.setHours(0, 0, 0, 0);
-    if (today.getDate() > 20) view.setMonth(view.getMonth() + 1); // roll to next month when this one is almost done
+  /* =========================================================
+     SCHEDULER — Calendly inline embed (Debbie's real calendar)
+     ========================================================= */
+  var CAL_BASE = CALENDLY + '?hide_gdpr_banner=1&primary_color=ce9b50';
+  var calWidget = $('.calendly-inline-widget');
 
-    root.querySelector('.booker__grid').innerHTML =
-      '<aside class="booker__aside">' +
-        '<p class="kicker kicker--plain" style="color:var(--gold)">Schedule</p>' +
-        '<h3 class="h3">Book your free consultation</h3>' +
-        '<p>Thirty minutes with Debbie &mdash; go over your business, your books, and what a clean monthly rhythm would look like. No pressure, no obligation.</p>' +
-        '<ul class="booker__expect">' +
-          '<li>A quick look at where your books stand today</li>' +
-          '<li>What clean monthly bookkeeping would cover</li>' +
-          '<li>A straight answer on cost &mdash; no hard sell</li>' +
-        '</ul>' +
-        '<figure class="booker__photo"><img src="images/photos/small-business.jpg" alt=""></figure>' +
-        '<div class="booker__summary" data-summary>Choose a service, day, and time.</div>' +
-      '</aside>' +
-      '<div class="booker__main">' +
-        '<div class="booker__step">' +
-          '<p class="booker__label"><span class="num">1</span> What&rsquo;s this about?</p>' +
-          '<div class="booker__services" data-services></div>' +
-        '</div>' +
-        '<div class="booker__step">' +
-          '<p class="booker__label"><span class="num">2</span> Pick a day</p>' +
-          '<div class="cal" data-cal></div>' +
-        '</div>' +
-        '<div class="booker__step">' +
-          '<p class="booker__label"><span class="num">3</span> Pick a time <span style="font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted-2)" data-tz>(Central Time)</span></p>' +
-          '<div class="booker__times" data-times data-empty></div>' +
-        '</div>' +
-        '<div class="booker__confirm">' +
-          '<button type="button" class="btn" data-confirm data-track="booking" disabled>Confirm booking' + ARROW + '</button>' +
-          '<span class="booker__hint">You&rsquo;ll get an email to finalise. We never share your details.</span>' +
-        '</div>' +
-      '</div>' +
-      '<div class="booker__done">' +
-        '<span class="tick">' + CHECK + '</span>' +
-        '<h3>Your consultation is requested</h3>' +
-        '<p class="recap" data-recap></p>' +
-        '<p>Debbie will confirm by email within one business day and send a calendar invite. Talk soon.</p>' +
-        '<button type="button" class="link-more" data-again>Book another time</button>' +
-      '</div>';
-
-    var servicesWrap = root.querySelector('[data-services]');
-    var calWrap = root.querySelector('[data-cal]');
-    var timesWrap = root.querySelector('[data-times]');
-    var confirmBtn = root.querySelector('[data-confirm]');
-    var summaryEl = root.querySelector('[data-summary]');
-
-    servicesWrap.innerHTML = SERVICES.map(function (s) {
-      return '<button type="button" class="chip' + (s === bookerState.service ? ' is-sel' : '') + '" data-svc="' + s + '"><span>' + s + '</span></button>';
-    }).join('');
-    servicesWrap.addEventListener('click', function (e) {
-      var b = e.target.closest('.chip'); if (!b) return;
-      bookerState.service = b.getAttribute('data-svc');
-      $$('.chip', servicesWrap).forEach(function (c) { c.classList.toggle('is-sel', c === b); });
-      syncSummary();
-    });
-
-    function renderCal() {
-      var y = view.getFullYear(), m = view.getMonth();
-      var first = new Date(y, m, 1).getDay();
-      var days = new Date(y, m + 1, 0).getDate();
-      var prevDisabled = (y === today.getFullYear() && m <= today.getMonth()) || y < today.getFullYear();
-      var maxMonth = new Date(); maxMonth.setMonth(maxMonth.getMonth() + 3);
-      var nextDisabled = (y > maxMonth.getFullYear()) || (y === maxMonth.getFullYear() && m >= maxMonth.getMonth());
-      var cells = '';
-      for (var i = 0; i < first; i++) cells += '<button class="is-empty" tabindex="-1" aria-hidden="true"></button>';
-      for (var d = 1; d <= days; d++) {
-        var date = new Date(y, m, d);
-        var dow = date.getDay();
-        var past = date < today;
-        var weekend = dow === 0 || dow === 6;
-        var disabled = past || weekend;
-        var sel = bookerState.date && bookerState.date.getTime() === date.getTime();
-        var isToday = date.getTime() === today.getTime();
-        cells += '<button type="button" data-d="' + d + '"' + (disabled ? ' disabled' : '') +
-          (sel ? ' class="is-sel"' : (isToday ? ' class="is-today"' : '')) + '>' + d + '</button>';
-      }
-      calWrap.innerHTML =
-        '<div class="cal__head"><b>' + MONTHS[m] + ' ' + y + '</b><div class="cal__nav">' +
-          '<button type="button" data-nav="-1"' + (prevDisabled ? ' disabled' : '') + ' aria-label="Previous month"><svg viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
-          '<button type="button" data-nav="1"' + (nextDisabled ? ' disabled' : '') + ' aria-label="Next month"><svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
-        '</div></div>' +
-        '<div class="cal__dow"><span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span></div>' +
-        '<div class="cal__days">' + cells + '</div>';
-    }
-
-    calWrap.addEventListener('click', function (e) {
-      var nav = e.target.closest('[data-nav]');
-      if (nav) { view.setMonth(view.getMonth() + parseInt(nav.getAttribute('data-nav'), 10)); renderCal(); return; }
-      var day = e.target.closest('[data-d]');
-      if (!day || day.disabled) return;
-      bookerState.date = new Date(view.getFullYear(), view.getMonth(), parseInt(day.getAttribute('data-d'), 10));
-      bookerState.time = null;
-      renderCal();
-      renderTimes();
-      syncSummary();
-    });
-
-    function renderTimes() {
-      if (!bookerState.date) { timesWrap.innerHTML = ''; timesWrap.setAttribute('data-empty', ''); return; }
-      timesWrap.removeAttribute('data-empty');
-      // pseudo-random but stable subset per date so it feels "live"
-      var seed = bookerState.date.getDate() + bookerState.date.getMonth();
-      timesWrap.innerHTML = SLOTS.filter(function (_, i) { return (seed + i) % 3 !== 0; }).map(function (t) {
-        return '<button type="button" class="chip' + (bookerState.time === t ? ' is-sel' : '') + '" data-t="' + t + '"><span>' + t + '</span></button>';
-      }).join('');
-    }
-    timesWrap.addEventListener('click', function (e) {
-      var b = e.target.closest('.chip'); if (!b) return;
-      bookerState.time = b.getAttribute('data-t');
-      $$('.chip', timesWrap).forEach(function (c) { c.classList.toggle('is-sel', c === b); });
-      syncSummary();
-    });
-
-    function fmtDate(d) {
-      return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()] + ', ' + MONTHS[d.getMonth()] + ' ' + d.getDate();
-    }
-    function syncSummary() {
-      var ok = bookerState.date && bookerState.time;
-      confirmBtn.disabled = !ok;
-      var parts = ['<b>' + bookerState.service + '</b>'];
-      if (bookerState.date) parts.push(fmtDate(bookerState.date));
-      if (bookerState.time) parts.push(bookerState.time + ' CT');
-      summaryEl.innerHTML = parts.join('<br>');
-    }
-
-    confirmBtn.addEventListener('click', function () {
-      if (confirmBtn.disabled) return;
-      root.classList.add('is-done');
-      var recap = root.querySelector('[data-recap]');
-      recap.innerHTML = '<b>' + bookerState.service + '</b> &nbsp;&middot;&nbsp; ' +
-        fmtDate(bookerState.date) + ' &nbsp;&middot;&nbsp; ' + bookerState.time + ' Central' +
-        (bookerState.name ? ' &nbsp;&middot;&nbsp; ' + bookerState.name : '');
-      root.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
-    });
-    root.querySelector('[data-again]').addEventListener('click', function () {
-      root.classList.remove('is-done');
-      bookerState.date = null; bookerState.time = null;
-      renderCal(); renderTimes(); syncSummary();
-      root.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
-    });
-
-    renderCal(); renderTimes(); syncSummary();
+  function calReady(cb) {
+    if (window.Calendly && window.Calendly.initInlineWidget) return cb();
+    var tries = 0, t = setInterval(function () {
+      if (window.Calendly && window.Calendly.initInlineWidget) { clearInterval(t); cb(); }
+      else if (++tries > 70) clearInterval(t);
+    }, 120);
   }
 
-  function openBooker(prefill) {
+  function loadCalendly(prefill) {
+    if (!calWidget) return;
+    calReady(function () {
+      try {
+        calWidget.innerHTML = '';
+        window.Calendly.initInlineWidget({ url: CAL_BASE, parentElement: calWidget, prefill: prefill || {} });
+      } catch (e) { /* leave the markup embed in place */ }
+    });
+  }
+
+  function openScheduler(prefill) {
     prefill = prefill || {};
-    if (prefill.service && SERVICES.indexOf(prefill.service) > -1) bookerState.service = prefill.service;
-    else if (prefill.service) bookerState.service = 'Not sure yet';
-    if (prefill.name) bookerState.name = prefill.name;
-    if (prefill.email) bookerState.email = prefill.email;
-    if (prefill.note) bookerState.note = prefill.note;
     var target = document.getElementById('book');
-    if (target) {
-      if (bookerEl) {
-        $$('.booker__services .chip', bookerEl).forEach(function (c) {
-          c.classList.toggle('is-sel', c.getAttribute('data-svc') === bookerState.service);
-        });
-        var s = bookerEl.querySelector('[data-summary]');
-        if (s && !bookerEl.classList.contains('is-done')) s.innerHTML = '<b>' + bookerState.service + '</b><br>Pick a day and time.';
-      }
+    if (calWidget && target) {
+      var pf = {};
+      if (prefill.name) pf.name = prefill.name;
+      if (prefill.email) pf.email = prefill.email;
+      if (prefill.note) pf.customAnswers = { a1: prefill.note };
+      if (pf.name || pf.email || pf.customAnswers) loadCalendly(pf);
       target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
     } else {
-      try {
-        sessionStorage.setItem('apb_book', JSON.stringify({
-          service: bookerState.service, name: bookerState.name, email: bookerState.email, note: bookerState.note
-        }));
-      } catch (e) { /* ignore */ }
+      try { if (prefill.note) sessionStorage.setItem('apb_note', prefill.note); } catch (e) { /* ignore */ }
       window.location.href = 'contact.html#book';
     }
   }
 
-  var bk = $('[data-booker]');
-  if (bk) {
-    try {
-      var carried = sessionStorage.getItem('apb_book');
-      if (carried) { var c = JSON.parse(carried); sessionStorage.removeItem('apb_book');
-        if (c.service) bookerState.service = SERVICES.indexOf(c.service) > -1 ? c.service : 'Not sure yet';
-        bookerState.name = c.name || ''; bookerState.email = c.email || ''; bookerState.note = c.note || '';
-      }
-    } catch (e) { /* ignore */ }
-    initBooker(bk);
+  if (calWidget) {
+    // pick up a quiz/message summary carried from another page
+    var carriedNote = '';
+    try { carriedNote = sessionStorage.getItem('apb_note') || ''; if (carriedNote) sessionStorage.removeItem('apb_note'); } catch (e) { /* ignore */ }
+    if (carriedNote) loadCalendly({ customAnswers: { a1: carriedNote } });
+    if (location.hash === '#book') setTimeout(function () {
+      var t = document.getElementById('book'); if (t) t.scrollIntoView();
+    }, 250);
   }
 
-  // any [data-book] link opens the booker (or navigates to it)
   $$('[data-book]').forEach(function (a) {
     a.addEventListener('click', function (e) {
-      e.preventDefault();
-      openBooker({ service: a.getAttribute('data-service') || null });
+      if (calWidget) { e.preventDefault(); openScheduler({}); return; }
+      var href = a.getAttribute('href') || '';
+      if (href === '#book' || href.indexOf('#book') === 0) { e.preventDefault(); window.location.href = 'contact.html#book'; }
+      // otherwise the href already points at contact.html#book — let it navigate
     });
   });
 
+  /* legacy no-op stubs (kept so older inline calls don't throw) */
   /* =========================================================
      QUIZ — "Are your books losing you money?"  (no pricing)
      ========================================================= */
@@ -417,7 +271,7 @@
           var fg = body.querySelector('.quiz__ring .fg'); if (fg) fg.style.strokeDashoffset = off;
         });
         body.querySelector('[data-quiz-book]').addEventListener('click', function () {
-          openBooker({ service: 'Free consultation', note: note });
+          openScheduler({ note: note });
         });
         body.querySelector('.quiz__restart').addEventListener('click', function () {
           answers = new Array(QUIZ.length).fill(null); view = 'intro'; render();
@@ -486,50 +340,41 @@
           encodeURIComponent('Website enquiry — ' + (name || 'New')) +
           '&body=' + encodeURIComponent('Name: ' + name + '\nEmail: ' + (data.get('email') || '') + '\nPhone: ' + (data.get('phone') || '') + '\n\n' + note));
       }
-      openBooker({ service: 'Free consultation', name: name, email: data.get('email') || '', note: note });
+      openScheduler({ name: name, email: data.get('email') || '', note: note });
     });
   }
 
   /* =========================================================
-     REVIEW BUBBLE (bottom-right, rotating, dismissible)
+     REVIEW BUBBLE — Debbie's real Google review, bottom-right
      ========================================================= */
-  var REVIEWS = [
-    { t: 'She caught two years of miscategorized expenses in the first month. Our CPA was thrilled.', n: 'Marcus D.', r: 'Contractor, S-Corp' },
-    { t: 'For the first time I actually know what we made last month. Worth every penny.', n: 'Priya S.', r: 'Agency owner' },
-    { t: 'Books used to be a Sunday-night panic. Now I never think about them.', n: 'Danielle R.', r: 'E-commerce, LLC' },
-    { t: 'Payroll and invoicing just... handled. Above Par is the easiest vendor we work with.', n: 'Tom & Angela K.', r: 'Family HVAC business' }
-  ];
+  var GBP_URL = 'https://share.google/vOsIL2xC95UJYuE14';
+  var GOOGLE_G = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">' +
+    '<path fill="#4285F4" d="M23 12.25c0-.78-.07-1.53-.2-2.25H12v4.5h6.19a5.3 5.3 0 0 1-2.3 3.48v2.9h3.72C21.86 18.9 23 15.85 23 12.25z"/>' +
+    '<path fill="#34A853" d="M12 24c3.11 0 5.72-1.03 7.62-2.79l-3.72-2.9c-1.03.7-2.36 1.1-3.9 1.1-3 0-5.55-2.03-6.46-4.76H1.7v2.99A12 12 0 0 0 12 24z"/>' +
+    '<path fill="#FBBC05" d="M5.54 14.65a7.2 7.2 0 0 1 0-4.6V7.06H1.7a12 12 0 0 0 0 10.58l3.84-3z"/>' +
+    '<path fill="#EA4335" d="M12 4.75c1.69 0 3.2.58 4.4 1.72l3.3-3.3C17.72 1.2 15.1 0 12 0 7.5 0 3.6 2.58 1.7 6.34l3.84 3C6.45 6.78 9 4.75 12 4.75z"/></svg>';
+  var REVIEW_SHORT = 'Debbie and her team went above and beyond when I transitioned to their company — they really are above the par!';
   var bubble = $('.review-bubble');
   if (bubble) {
-    var bi = Math.floor(Math.random() * REVIEWS.length), rot = null, dismissed = false;
+    var dismissed = false;
     try { dismissed = sessionStorage.getItem('apb_rev') === '1'; } catch (e) { /* */ }
-    var starRow = '<span class="tstar" aria-label="5 out of 5 stars">' +
-      new Array(5).join('0').split('').map(function () { return '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 1.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L10 15l-5.2 2.7 1-5.8L1.5 7.7l5.9-.9z"/></svg>'; }).join('') +
-      '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 1.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L10 15l-5.2 2.7 1-5.8L1.5 7.7l5.9-.9z"/></svg></span>';
-    function paint() {
-      var rv = REVIEWS[bi % REVIEWS.length];
+    if (!dismissed) {
+      var starRow = '<span class="tstar" aria-label="5 out of 5 stars">' +
+        Array.apply(null, { length: 5 }).map(function () {
+          return '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 1.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L10 15l-5.2 2.7 1-5.8L1.5 7.7l5.9-.9z"/></svg>';
+        }).join('') + '</span>';
       bubble.innerHTML =
-        '<div class="review-bubble__top"><span class="review-bubble__src">' +
-          '<svg viewBox="0 0 20 20" fill="currentColor" style="width:12px;height:12px"><path d="M10 1.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L10 15l-5.2 2.7 1-5.8L1.5 7.7l5.9-.9z"/></svg> Client review</span>' +
+        '<div class="review-bubble__top"><span class="review-bubble__src">' + GOOGLE_G + ' Google review</span>' +
           '<button type="button" class="review-bubble__x" aria-label="Dismiss"><svg viewBox="0 0 20 20" fill="none"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>' +
         '</div>' + starRow +
-        '<p>&ldquo;' + rv.t + '&rdquo;</p>' +
-        '<div class="review-bubble__who"><span class="avatar">' + rv.n.split(' ').map(function (w) { return w[0]; }).slice(0, 2).join('') + '</span>' +
-          '<span><b>' + rv.n + '</b><span>' + rv.r + '</span></span></div>';
+        '<p>&ldquo;' + REVIEW_SHORT + '&rdquo;</p>' +
+        '<a class="review-bubble__who" href="' + GBP_URL + '" target="_blank" rel="noopener">' +
+          '<span class="avatar">SR</span><span><b>Sarah Reyna</b><span>Verified on Google &rarr;</span></span></a>';
       bubble.querySelector('.review-bubble__x').addEventListener('click', function () {
-        bubble.classList.remove('is-open'); dismissed = true;
-        try { sessionStorage.setItem('apb_rev', '1'); } catch (e) { /* */ }
-        if (rot) clearInterval(rot);
-      });
-    }
-    if (!dismissed) {
-      setTimeout(function () { paint(); bubble.classList.add('is-open'); }, reduce ? 800 : 5200);
-      if (!reduce) rot = setInterval(function () {
-        if (dismissed) return;
         bubble.classList.remove('is-open');
-        setTimeout(function () { bi++; paint(); bubble.classList.add('is-open'); }, 500);
-      }, 9000);
-      bubble.addEventListener('mouseenter', function () { if (rot) { clearInterval(rot); rot = null; } });
+        try { sessionStorage.setItem('apb_rev', '1'); } catch (e) { /* */ }
+      });
+      setTimeout(function () { bubble.classList.add('is-open'); }, reduce ? 800 : 4800);
     }
   }
 })();
